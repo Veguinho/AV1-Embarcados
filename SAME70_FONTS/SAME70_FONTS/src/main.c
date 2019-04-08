@@ -17,18 +17,29 @@
 #define LED_IDX       8u
 #define LED_IDX_MASK  (1u << LED_IDX)
 
+//botao da placa
 #define BUT_PIO			PIOA
 #define BUT_PIO_ID		10
 #define BUT_PIO_IDX		11
 #define BUT_PIO_IDX_MASK (1u << BUT_PIO_IDX)
+
+//butao 3 oled
+#define EBUT3_PIO PIOC //sei la EXT 3 PC31
+#define EBUT3_PIO_ID 12 // piod ID
+#define EBUT3_PIO_IDX 31
+#define EBUT3_PIO_IDX_MASK (1u << EBUT3_PIO_IDX)
 
 struct ili9488_opt_t g_ili9488_display_opt;
 
 volatile Bool f_rtt_alarme = false;
 volatile Bool but_flag;
 
+int counter_pulsos = 0;
+int velocidade = 0;
+int distancia = 0;
+char bufferVelocidade[32];
+char bufferDistancia[32];
 
-char buffertext[32];
 
 
 /************************************************************************/
@@ -55,10 +66,26 @@ void RTT_Handler(void)
 
 	/* IRQ due to Alarm */
 	if ((ul_status & RTT_SR_ALMS) == RTT_SR_ALMS) {
-		ili9488_draw_filled_rectangle(50, 200, ILI9488_LCD_WIDTH-1, ILI9488_LCD_HEIGHT-1);
-		sprintf(buffertext, "%d", rtt_read_timer_value(RTT));
-		font_draw_text(&calibri_36, buffertext, 50, 150, 2);
-		//pin_toggle(LED_PIO, LED_IDX_MASK);    // BLINK Led
+		ili9488_draw_filled_rectangle(0, 0, ILI9488_LCD_WIDTH-1, ILI9488_LCD_HEIGHT-1);
+		
+		//calcula a velocidade angular baseado nos pulsos
+		if(counter_pulsos != 0){
+			velocidade = 2 * 3.1415 * counter_pulsos / 4;
+			distancia += 2 * 3.1415 * 0.325 * counter_pulsos;
+			
+		}
+		else{
+			velocidade = 0;
+		}
+		sprintf(bufferVelocidade, "%d", velocidade);
+		sprintf(bufferDistancia, "%d", distancia);
+		font_draw_text(&sourcecodepro_28, "PROGRAMA", 50, 50, 1);
+		font_draw_text(&calibri_36, "VELOCIDADE:", 50, 100, 1);
+		font_draw_text(&calibri_36, bufferVelocidade, 50, 150, 2);
+		font_draw_text(&calibri_36, "DISTANCIA:", 50, 200, 1);
+		font_draw_text(&calibri_36, bufferDistancia, 50, 250, 1);
+
+		counter_pulsos = 0;
 		f_rtt_alarme = true;                  // flag RTT alarme
 	}
 }
@@ -74,7 +101,6 @@ void but_callback(void)
 }
 
 void pulsou(){
-	
 	but_flag = false;
 }
 
@@ -91,28 +117,28 @@ void io_init(void){
 	pio_configure(LED_PIO, PIO_OUTPUT_0, LED_IDX_MASK, PIO_DEFAULT);
 	
 	// Inicializa clock do periférico PIO responsavel pelo botao
-	pmc_enable_periph_clk(BUT_PIO_ID);
+	pmc_enable_periph_clk(EBUT3_PIO_ID);
 
 	// Configura PIO para lidar com o pino do botão como entrada
 	// com pull-up
-	pio_configure(BUT_PIO, PIO_INPUT, BUT_PIO_IDX_MASK, PIO_PULLUP);
+	pio_configure(EBUT3_PIO, PIO_INPUT, EBUT3_PIO_IDX_MASK, PIO_PULLUP);
 
 	// Configura interrupção no pino referente ao botao e associa
 	// função de callback caso uma interrupção for gerada
 	// a função de callback é a: but_callback()
-	pio_handler_set(BUT_PIO,
-	BUT_PIO_ID,
-	BUT_PIO_IDX_MASK,
+	pio_handler_set(EBUT3_PIO,
+	EBUT3_PIO_ID,
+	EBUT3_PIO_IDX_MASK,
 	PIO_IT_RISE_EDGE,
 	but_callback);
 	
 	 // Ativa interrupção
-	 pio_enable_interrupt(BUT_PIO, BUT_PIO_IDX_MASK);
+	 pio_enable_interrupt(EBUT3_PIO, EBUT3_PIO_IDX_MASK);
 
 	 // Configura NVIC para receber interrupcoes do PIO do botao
 	 // com prioridade 4 (quanto mais próximo de 0 maior)
-	 NVIC_EnableIRQ(BUT_PIO_ID);
-	 NVIC_SetPriority(BUT_PIO_ID, 4); // Prioridade 4
+	 NVIC_EnableIRQ(EBUT3_PIO_ID);
+	 NVIC_SetPriority(EBUT3_PIO_ID, 4); // Prioridade 4
 }
 
 static float get_time_rtt(){
@@ -177,13 +203,16 @@ int main(void) {
 	// Inicializa RTT com IRQ no alarme.
 	f_rtt_alarme = true;
 	
+	io_init();
 	board_init();
 	sysclk_init();	
 	configure_lcd();
 	
 	font_draw_text(&sourcecodepro_28, "PROGRAMA", 50, 50, 1);
-	font_draw_text(&calibri_36, "VELOCIDADE ", 50, 100, 1);
+	font_draw_text(&calibri_36, "VELOCIDADE:", 50, 100, 1);
 	//font_draw_text(&calibri_36, "102456", 50, 200, 2);
+	font_draw_text(&calibri_36, "DISTANCIA:", 50, 200, 1);
+	
 	
 	
 	while(1) {
@@ -211,13 +240,22 @@ int main(void) {
       uint16_t pllPreScale = (int) (((float) 32768) / 2.0);
       uint32_t irqRTTvalue  = 8;
       
+	  //TIMER DE SEGUNDOS
+	  uint16_t pllPreScaleSEGUNDOS = (int) (((float) 32768) / 2.0);
+	  uint32_t irqRTTvalueSEGUNDOS  = 2;
+	  
       // reinicia RTT para gerar um novo IRQ
-      RTT_init(pllPreScale, irqRTTvalue);         
+      RTT_init(pllPreScale, irqRTTvalue);  
+	  RTT_init(pllPreScaleSEGUNDOS, irqRTTvalueSEGUNDOS);       
       
      /*
       * caso queira ler o valor atual do RTT, basta usar a funcao
       *   rtt_read_timer_value() */
       f_rtt_alarme = false;
     }
+	if (but_flag){
+		counter_pulsos++;
+		pulsou();
+	}
   }
 }
