@@ -8,9 +8,21 @@
 #include <asf.h>
 #include "tfont.h"
 #include "rtt.h"
+#include "rtc.h"
 #include "sourcecodepro_28.h"
 #include "calibri_36.h"
 #include "arial_72.h"
+
+#define YEAR        2018
+#define MOUNTH      3
+#define DAY         19
+#define WEEK        12
+#define HOUR        0
+#define MINUTE      0
+#define SECOND      0
+
+uint32_t hour, minuto, seg;
+
 
 #define LED_PIO       PIOC
 #define LED_PIO_ID    ID_PIOC
@@ -39,7 +51,9 @@ int velocidade = 0;
 int distancia = 0;
 char bufferVelocidade[32];
 char bufferDistancia[32];
-
+char bufferHour[32];
+char bufferMinutes[32];
+char bufferSeconds[32];
 
 
 /************************************************************************/
@@ -49,6 +63,8 @@ void pin_toggle(Pio *pio, uint32_t mask);
 void io_init(void);
 static void RTT_init(uint16_t pllPreScale, uint32_t IrqNPulses);
 void font_draw_text(tFont *font, const char *text, int x, int y, int spacing);
+void TC_init(Tc * TC, int ID_TC, int TC_CHANNEL, int freq);
+void RTC_init(void);
 
 /************************************************************************/
 /* interrupcoes                                                         */
@@ -66,7 +82,7 @@ void RTT_Handler(void)
 
 	/* IRQ due to Alarm */
 	if ((ul_status & RTT_SR_ALMS) == RTT_SR_ALMS) {
-		ili9488_draw_filled_rectangle(0, 0, ILI9488_LCD_WIDTH-1, ILI9488_LCD_HEIGHT-1);
+		ili9488_draw_filled_rectangle(0, 0, ILI9488_LCD_WIDTH-1, 300);
 		
 		//calcula a velocidade angular baseado nos pulsos
 		if(counter_pulsos != 0){
@@ -90,6 +106,65 @@ void RTT_Handler(void)
 	}
 }
 
+
+void RTC_Handler(void)
+{
+	uint32_t ul_status = rtc_get_status(RTC);
+
+	uint32_t hour, minute, second;
+	/*
+	*  Verifica por qual motivo entrou
+	*  na interrupcao, se foi por segundo
+	*  ou Alarm
+	*/
+	if ((ul_status & RTC_SR_SEC) == RTC_SR_SEC) {
+		rtc_clear_status(RTC, RTC_SCCR_SECCLR);
+	}
+	
+	/* Time or date alarm */
+	if ((ul_status & RTC_SR_ALARM) == RTC_SR_ALARM) {
+
+		rtc_clear_status(RTC, RTC_SCCR_ALRCLR);
+		
+		rtc_get_time(RTC, &hour, &minute, &second);
+		
+		ili9488_draw_filled_rectangle(50, 300, ILI9488_LCD_WIDTH-1, ILI9488_LCD_HEIGHT-1);
+		font_draw_text(&calibri_36, "TEMPO:", 50, 300, 1);
+		
+	
+		sprintf(bufferHour, "%d", hour);
+		sprintf(bufferMinutes, "%d", minute);
+		sprintf(bufferSeconds, "%d", second);
+
+
+		font_draw_text(&calibri_36, bufferHour, 50, 350, 1);
+		font_draw_text(&calibri_36, ":", 75, 350, 1);
+		font_draw_text(&calibri_36, bufferMinutes, 100, 350, 1);
+		font_draw_text(&calibri_36, ":", 125, 350, 1);
+		font_draw_text(&calibri_36, bufferSeconds, 150, 350, 1);
+			
+		if(second>=59){
+			second = 0;
+			minute += 1;
+			rtc_set_time_alarm(RTC, 1, hour, 1, minute, 1, second+1);
+		}
+		if(minute>=60 && second>=59){
+			minute = 0;
+			hour += 1;
+		}
+		else{
+			rtc_set_time_alarm(RTC, 1, hour, 1, minute, 1, second+1);
+		}
+
+	}
+	
+	rtc_clear_status(RTC, RTC_SCCR_ACKCLR);
+	rtc_clear_status(RTC, RTC_SCCR_TIMCLR);
+	rtc_clear_status(RTC, RTC_SCCR_CALCLR);
+	rtc_clear_status(RTC, RTC_SCCR_TDERRCLR);
+	
+}
+
 /************************************************************************/
 /* funcoes                                                              */
 /************************************************************************/
@@ -104,12 +179,7 @@ void pulsou(){
 	but_flag = false;
 }
 
-void pin_toggle(Pio *pio, uint32_t mask){
-	if(pio_get_output_data_status(pio, mask))
-	pio_clear(pio, mask);
-	else
-	pio_set(pio,mask);
-}
+
 
 void io_init(void){
 	/* led */
@@ -149,6 +219,12 @@ static void RTT_init(uint16_t pllPreScale, uint32_t IrqNPulses)
 {
 	uint32_t ul_previous_time;
 
+	/* Enable RTT interrupt */
+	NVIC_DisableIRQ(RTT_IRQn);
+	NVIC_ClearPendingIRQ(RTT_IRQn);
+	NVIC_SetPriority(RTT_IRQn, 0);
+	NVIC_EnableIRQ(RTT_IRQn);
+	
 	/* Configure RTT for a 1 second tick interrupt */
 	rtt_sel_source(RTT, false);
 	rtt_init(RTT, pllPreScale);
@@ -158,12 +234,30 @@ static void RTT_init(uint16_t pllPreScale, uint32_t IrqNPulses)
 	
 	rtt_write_alarm_time(RTT, IrqNPulses+ul_previous_time);
 
-	/* Enable RTT interrupt */
-	NVIC_DisableIRQ(RTT_IRQn);
-	NVIC_ClearPendingIRQ(RTT_IRQn);
-	NVIC_SetPriority(RTT_IRQn, 0);
-	NVIC_EnableIRQ(RTT_IRQn);
+
 	rtt_enable_interrupt(RTT, RTT_MR_ALMIEN);
+}
+
+void RTC_init(){
+	/* Configura o PMC */
+	pmc_enable_periph_clk(ID_RTC);
+
+	/* Default RTC configuration, 24-hour mode */
+	rtc_set_hour_mode(RTC, 0);
+
+	/* Configura data e hora manualmente */
+	rtc_set_date(RTC, YEAR, MOUNTH, DAY, WEEK);
+	rtc_set_time(RTC, HOUR, MINUTE, SECOND);
+
+	/* Configure RTC interrupts */
+	NVIC_DisableIRQ(RTC_IRQn);
+	NVIC_ClearPendingIRQ(RTC_IRQn);
+	NVIC_SetPriority(RTC_IRQn, 0);
+	NVIC_EnableIRQ(RTC_IRQn);
+
+	/* Ativa interrupcao via alarme */
+	rtc_enable_interrupt(RTC,  RTC_IER_ALREN);
+
 }
 
 void configure_lcd(void){
@@ -202,11 +296,13 @@ int main(void) {
 	
 	// Inicializa RTT com IRQ no alarme.
 	f_rtt_alarme = true;
-	
+	RTC_init();
 	io_init();
 	board_init();
 	sysclk_init();	
 	configure_lcd();
+	
+	rtc_set_time_alarm(RTC, 1, HOUR, 1, MINUTE, 1, SECOND+1);
 	
 	font_draw_text(&sourcecodepro_28, "PROGRAMA", 50, 50, 1);
 	font_draw_text(&calibri_36, "VELOCIDADE:", 50, 100, 1);
@@ -216,46 +312,24 @@ int main(void) {
 	
 	
 	while(1) {
+		pmc_sleep(SAM_PM_SMODE_SLEEP_WFI);
+		
 		if (f_rtt_alarme){
-      
-      /*
-       * O clock base do RTT é 32678Hz
-       * Para gerar outra base de tempo é necessário
-       * usar o PLL pre scale, que divide o clock base.
-       *
-       * Nesse exemplo, estamos operando com um clock base
-       * de pllPreScale = 32768/32768/2 = 2Hz
-       *
-       * Quanto maior a frequência maior a resolução, porém
-       * menor o tempo máximo que conseguimos contar.
-       *
-       * Podemos configurar uma IRQ para acontecer quando 
-       * o contador do RTT atingir um determinado valor
-       * aqui usamos o irqRTTvalue para isso.
-       * 
-       * Nesse exemplo o irqRTTvalue = 8, causando uma
-       * interrupção a cada 2 segundos (lembre que usamos o 
-       * pllPreScale, cada incremento do RTT leva 500ms (2Hz).
-       */
-      uint16_t pllPreScale = (int) (((float) 32768) / 2.0);
-      uint32_t irqRTTvalue  = 8;
-      
-	  //TIMER DE SEGUNDOS
-	  uint16_t pllPreScaleSEGUNDOS = (int) (((float) 32768) / 2.0);
-	  uint32_t irqRTTvalueSEGUNDOS  = 2;
+			uint16_t pllPreScale = (int) (((float) 32768) / 2.0);
+			uint32_t irqRTTvalue  = 8;
+ 
 	  
-      // reinicia RTT para gerar um novo IRQ
-      RTT_init(pllPreScale, irqRTTvalue);  
-	  RTT_init(pllPreScaleSEGUNDOS, irqRTTvalueSEGUNDOS);       
+			// reinicia RTT para gerar um novo IRQ
+			RTT_init(pllPreScale, irqRTTvalue);  
       
-     /*
-      * caso queira ler o valor atual do RTT, basta usar a funcao
-      *   rtt_read_timer_value() */
-      f_rtt_alarme = false;
-    }
-	if (but_flag){
-		counter_pulsos++;
-		pulsou();
+			/*
+			* caso queira ler o valor atual do RTT, basta usar a funcao
+			*   rtt_read_timer_value() */
+			f_rtt_alarme = false;
+		}
+		if (but_flag){
+			counter_pulsos++;
+			pulsou();
+		}
 	}
-  }
 }

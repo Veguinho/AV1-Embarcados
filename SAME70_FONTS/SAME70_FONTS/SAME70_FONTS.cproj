@@ -568,9 +568,13 @@
     <Folder Include="src\ASF\sam\drivers\mpu\" />
     <Folder Include="src\ASF\sam\drivers\pio\" />
     <Folder Include="src\ASF\sam\drivers\pmc\" />
+    <Folder Include="src\ASF\sam\drivers\rtc\" />
+    <Folder Include="src\ASF\sam\drivers\rtc\" />
     <Folder Include="src\ASF\sam\drivers\rtt\" />
     <Folder Include="src\ASF\sam\drivers\rtt\" />
     <Folder Include="src\ASF\sam\drivers\spi\" />
+    <Folder Include="src\ASF\sam\drivers\tc\" />
+    <Folder Include="src\ASF\sam\drivers\tc\" />
     <Folder Include="src\ASF\sam\utils\" />
     <Folder Include="src\ASF\sam\utils\cmsis\" />
     <Folder Include="src\ASF\sam\utils\cmsis\same70\" />
@@ -602,13 +606,25 @@
     <Compile Include="src\arial_72.h">
       <SubType>compile</SubType>
     </Compile>
+    <Compile Include="src\ASF\sam\drivers\rtc\rtc.c">
+      <SubType>compile</SubType>
+    </Compile>
     <Compile Include="src\ASF\sam\drivers\rtt\rtt.c">
+      <SubType>compile</SubType>
+    </Compile>
+    <Compile Include="src\ASF\sam\drivers\tc\tc.c">
+      <SubType>compile</SubType>
+    </Compile>
+    <Compile Include="src\ASF\sam\drivers\tc\tc.h">
       <SubType>compile</SubType>
     </Compile>
     <Compile Include="src\calibri_36.h">
       <SubType>compile</SubType>
     </Compile>
     <Compile Include="src\main.c">
+      <SubType>compile</SubType>
+    </Compile>
+    <Compile Include="src\rtc.h">
       <SubType>compile</SubType>
     </Compile>
     <Compile Include="src\rtt.h">
