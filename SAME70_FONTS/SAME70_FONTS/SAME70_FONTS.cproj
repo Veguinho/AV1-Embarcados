@@ -568,6 +568,8 @@
     <Folder Include="src\ASF\sam\drivers\mpu\" />
     <Folder Include="src\ASF\sam\drivers\pio\" />
     <Folder Include="src\ASF\sam\drivers\pmc\" />
+    <Folder Include="src\ASF\sam\drivers\rtt\" />
+    <Folder Include="src\ASF\sam\drivers\rtt\" />
     <Folder Include="src\ASF\sam\drivers\spi\" />
     <Folder Include="src\ASF\sam\utils\" />
     <Folder Include="src\ASF\sam\utils\cmsis\" />
@@ -600,10 +602,16 @@
     <Compile Include="src\arial_72.h">
       <SubType>compile</SubType>
     </Compile>
+    <Compile Include="src\ASF\sam\drivers\rtt\rtt.c">
+      <SubType>compile</SubType>
+    </Compile>
     <Compile Include="src\calibri_36.h">
       <SubType>compile</SubType>
     </Compile>
     <Compile Include="src\main.c">
+      <SubType>compile</SubType>
+    </Compile>
+    <Compile Include="src\rtt.h">
       <SubType>compile</SubType>
     </Compile>
     <Compile Include="src\sourcecodepro_28.h">
